@@ -26,6 +26,18 @@ MESES = {
 }
 
 
+PREFIJO_ZNISISFV = "ZNISISFV_54787_54_"
+
+
+def nombre_znisisfv_esperado(mes: int, anio: int) -> str:
+    """El archivo Formato54 se nombra con el mes SIGUIENTE al periodo reportado."""
+    if mes == 12:
+        mes_sig, anio_sig = 1, anio + 1
+    else:
+        mes_sig, anio_sig = mes + 1, anio
+    return f"{PREFIJO_ZNISISFV}{mes_sig:02d}{anio_sig}.xlsx"
+
+
 def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
                      mes: int, anio: int) -> pd.DataFrame:
     """Construye el DataFrame de salida siguiendo las reglas del reporte SUI."""
@@ -147,35 +159,44 @@ if st.button("Generar reporte", type="primary"):
     if archivo_znisisfv is None or archivo_usuarios is None:
         st.error("Debes cargar los dos archivos antes de generar el reporte.")
     else:
-        try:
-            df_znisisfv = pd.read_excel(archivo_znisisfv, sheet_name="Formato54")
-            df_usuarios = pd.read_excel(archivo_usuarios, sheet_name="BD_Usuarios")
-
-            resultado = generar_reporte(df_znisisfv, df_usuarios, mes, anio)
-
-            faltantes = resultado["LONGITUD"].isna().sum()
-            if faltantes:
-                st.warning(
-                    f"{faltantes} registro(s) no tuvieron coincidencia en el archivo "
-                    "Usuarios (LONGITUD/LATITUD/DIRECCION quedaron vacíos)."
-                )
-
-            st.success(f"Reporte generado con {len(resultado)} registros.")
-
-            st.write("**Totales de validación** (no se incluyen en el Excel descargado):")
-            t1, t2, t3 = st.columns(3)
-            t1.metric("Suma TARIFA", f"${resultado['TARIFA'].sum():,.0f}")
-            t2.metric("Suma VAL SUBS", f"${resultado['VAL SUBS'].sum():,.0f}")
-            t3.metric("Suma FACT CONSUMO", f"${resultado['FACT CONSUMO'].sum():,.0f}")
-
-            st.dataframe(resultado.head(20))
-
-            nombre_archivo = f"IUF1_{mes:02d}_{anio}.xlsx"
-            st.download_button(
-                label=f"Descargar {nombre_archivo}",
-                data=to_excel_bytes(resultado),
-                file_name=nombre_archivo,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        nombre_esperado = nombre_znisisfv_esperado(mes, anio)
+        if archivo_znisisfv.name != nombre_esperado:
+            st.error(
+                f"El archivo ZNISISFV cargado se llama **{archivo_znisisfv.name}**, "
+                f"pero para generar el reporte de {MESES[mes]} {anio} se espera el "
+                f"archivo **{nombre_esperado}** (Formato 54 usa el mes siguiente al "
+                "periodo reportado). Sube el archivo correcto para continuar."
             )
-        except Exception as e:
-            st.error(f"Ocurrió un error generando el reporte: {e}")
+        else:
+            try:
+                df_znisisfv = pd.read_excel(archivo_znisisfv, sheet_name="Formato54")
+                df_usuarios = pd.read_excel(archivo_usuarios, sheet_name="BD_Usuarios")
+
+                resultado = generar_reporte(df_znisisfv, df_usuarios, mes, anio)
+
+                faltantes = resultado["LONGITUD"].isna().sum()
+                if faltantes:
+                    st.warning(
+                        f"{faltantes} registro(s) no tuvieron coincidencia en el archivo "
+                        "Usuarios (LONGITUD/LATITUD/DIRECCION quedaron vacíos)."
+                    )
+
+                st.success(f"Reporte generado con {len(resultado)} registros.")
+
+                st.write("**Totales de validación** (no se incluyen en el Excel descargado):")
+                t1, t2, t3 = st.columns(3)
+                t1.metric("Suma TARIFA", f"${resultado['TARIFA'].sum():,.0f}")
+                t2.metric("Suma VAL SUBS", f"${resultado['VAL SUBS'].sum():,.0f}")
+                t3.metric("Suma FACT CONSUMO", f"${resultado['FACT CONSUMO'].sum():,.0f}")
+
+                st.dataframe(resultado.head(20))
+
+                nombre_archivo = f"IUF1_{mes:02d}_{anio}.xlsx"
+                st.download_button(
+                    label=f"Descargar {nombre_archivo}",
+                    data=to_excel_bytes(resultado),
+                    file_name=nombre_archivo,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            except Exception as e:
+                st.error(f"Ocurrió un error generando el reporte: {e}")
