@@ -93,6 +93,17 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Hoja1")
+
+        worksheet = writer.sheets["Hoja1"]
+
+        # Evitar notación científica en columnas de códigos numéricos largos
+        columnas_enteras_largas = ["NIU", "COD LOCALIDAD"]
+        for campo in columnas_enteras_largas:
+            col_idx = df.columns.get_loc(campo) + 1  # 1-based
+            col_letter = worksheet.cell(row=1, column=col_idx).column_letter
+            for fila in range(2, len(df) + 2):
+                worksheet[f"{col_letter}{fila}"].number_format = "0"
+
     return buffer.getvalue()
 
 
