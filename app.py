@@ -43,7 +43,9 @@ def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
 
     # --- Campos tomados directamente de ZNISISFV ---
     out["NIU"] = df_znisisfv["NIU"]
-    out["COD LOCALIDAD"] = df_znisisfv["COD_LOCALIDAD"]
+    out["COD LOCALIDAD"] = pd.to_numeric(
+        df_znisisfv["COD_LOCALIDAD"], errors="coerce"
+    ).round(0).astype("Int64")
     out["ID FACTURA"] = df_znisisfv["ID_FACTURA"]
     out["ENERGIA GEN MES"] = df_znisisfv["CONSUMO_ENERGIA"].round(0).astype("Int64")
     out["DIAS PRES MES"] = df_znisisfv["DIAS_PRESTACION"]
@@ -82,6 +84,9 @@ def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
     out["VAL TOTAL FACT"] = out["FACT CONSUMO"]
 
     return out[OUTPUT_COLUMNS]
+
+
+CAMPOS_TOTAL = ["TARIFA", "VAL SUBS", "FACT CONSUMO"]
 
 
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
@@ -132,6 +137,13 @@ if st.button("Generar reporte", type="primary"):
                 )
 
             st.success(f"Reporte generado con {len(resultado)} registros.")
+
+            st.write("**Totales de validación** (no se incluyen en el Excel descargado):")
+            t1, t2, t3 = st.columns(3)
+            t1.metric("Suma TARIFA", f"{resultado['TARIFA'].sum():,.2f}")
+            t2.metric("Suma VAL SUBS", f"{resultado['VAL SUBS'].sum():,.2f}")
+            t3.metric("Suma FACT CONSUMO", f"{resultado['FACT CONSUMO'].sum():,.2f}")
+
             st.dataframe(resultado.head(20))
 
             nombre_archivo = f"IUF1_{mes:02d}_{anio}.xlsx"
