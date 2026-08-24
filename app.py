@@ -140,9 +140,9 @@ if st.button("Generar reporte", type="primary"):
 
             st.write("**Totales de validación** (no se incluyen en el Excel descargado):")
             t1, t2, t3 = st.columns(3)
-            t1.metric("Suma TARIFA", f"{resultado['TARIFA'].sum():,.2f}")
-            t2.metric("Suma VAL SUBS", f"{resultado['VAL SUBS'].sum():,.2f}")
-            t3.metric("Suma FACT CONSUMO", f"{resultado['FACT CONSUMO'].sum():,.2f}")
+            t1.metric("Suma TARIFA", f"${resultado['TARIFA'].sum():,.0f}")
+            t2.metric("Suma VAL SUBS", f"${resultado['VAL SUBS'].sum():,.0f}")
+            t3.metric("Suma FACT CONSUMO", f"${resultado['FACT CONSUMO'].sum():,.0f}")
 
             st.dataframe(resultado.head(20))
 
