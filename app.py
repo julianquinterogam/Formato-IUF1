@@ -106,6 +106,17 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
             for fila in range(2, len(df) + 2):
                 worksheet[f"{col_letter}{fila}"].number_format = "0"
 
+        # Formato con 4 decimales
+        columnas_4_decimales = [
+            "FACT CONSUMO", "VAL REFACT", "VAL MORA", "INT MORA",
+            "VAL SUBS", "PORCE SUBS", "TARIFA", "VAL TOTAL FACT",
+        ]
+        for campo in columnas_4_decimales:
+            col_idx = df.columns.get_loc(campo) + 1  # 1-based
+            col_letter = worksheet.cell(row=1, column=col_idx).column_letter
+            for fila in range(2, len(df) + 2):
+                worksheet[f"{col_letter}{fila}"].number_format = "0.0000"
+
     return buffer.getvalue()
 
 
