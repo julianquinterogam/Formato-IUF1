@@ -80,7 +80,9 @@ def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
     out["TIPO LECT"] = 3
     out["VAL REFACT"] = 0
     out["INT MORA"] = 0
-    out["PORCE SUBS"] = out["VAL SUBS"] / out["FACT CONSUMO"]
+    out["PORCE SUBS"] = (out["VAL SUBS"] / out["FACT CONSUMO"]).replace(
+        [float("inf"), float("-inf")], 0
+    ).fillna(0).round(4)
     out["VAL TOTAL FACT"] = out["FACT CONSUMO"]
 
     return out[OUTPUT_COLUMNS]
