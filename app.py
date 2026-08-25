@@ -101,6 +101,11 @@ def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
 
 
 CAMPOS_TOTAL = ["TARIFA", "VAL SUBS", "FACT CONSUMO"]
+COLUMNAS_ENTERAS_LARGAS = ["NIU", "COD LOCALIDAD"]
+COLUMNAS_4_DECIMALES = [
+    "FACT CONSUMO", "VAL REFACT", "VAL MORA", "INT MORA",
+    "VAL SUBS", "PORCE SUBS", "TARIFA", "VAL TOTAL FACT",
+]
 
 
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
@@ -111,24 +116,37 @@ def to_excel_bytes(df: pd.DataFrame) -> bytes:
         worksheet = writer.sheets["Hoja1"]
 
         # Evitar notación científica en columnas de códigos numéricos largos
-        columnas_enteras_largas = ["NIU", "COD LOCALIDAD"]
-        for campo in columnas_enteras_largas:
+        for campo in COLUMNAS_ENTERAS_LARGAS:
             col_idx = df.columns.get_loc(campo) + 1  # 1-based
             col_letter = worksheet.cell(row=1, column=col_idx).column_letter
             for fila in range(2, len(df) + 2):
                 worksheet[f"{col_letter}{fila}"].number_format = "0"
 
         # Formato con 4 decimales
-        columnas_4_decimales = [
-            "FACT CONSUMO", "VAL REFACT", "VAL MORA", "INT MORA",
-            "VAL SUBS", "PORCE SUBS", "TARIFA", "VAL TOTAL FACT",
-        ]
-        for campo in columnas_4_decimales:
+        for campo in COLUMNAS_4_DECIMALES:
             col_idx = df.columns.get_loc(campo) + 1  # 1-based
             col_letter = worksheet.cell(row=1, column=col_idx).column_letter
             for fila in range(2, len(df) + 2):
                 worksheet[f"{col_letter}{fila}"].number_format = "0.0000"
 
+    return buffer.getvalue()
+
+
+def to_csv_bytes(df: pd.DataFrame) -> bytes:
+    """Genera el CSV separado por comas, replicando el formato de salida de Excel:
+    enteros sin decimales en NIU/COD LOCALIDAD, 4 decimales fijos en los campos
+    monetarios/porcentuales, campos vacíos en blanco, y fin de línea \\r\\n."""
+    df_csv = df.copy()
+
+    for campo in COLUMNAS_ENTERAS_LARGAS:
+        df_csv[campo] = df_csv[campo].astype("Int64").astype(str)
+
+    for campo in COLUMNAS_4_DECIMALES:
+        df_csv[campo] = df_csv[campo].map(lambda v: f"{float(v):.4f}")
+
+    buffer = BytesIO()
+    csv_texto = df_csv.to_csv(index=False, lineterminator="\r\n")
+    buffer.write(csv_texto.encode("utf-8"))
     return buffer.getvalue()
 
 
@@ -192,11 +210,22 @@ if st.button("Generar reporte", type="primary"):
                 st.dataframe(resultado.head(20))
 
                 nombre_archivo = f"IUF1_{mes:02d}_{anio}.xlsx"
-                st.download_button(
-                    label=f"Descargar {nombre_archivo}",
-                    data=to_excel_bytes(resultado),
-                    file_name=nombre_archivo,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+                nombre_csv = f"IUF1_{mes:02d}_{anio}.csv"
+
+                dcol1, dcol2 = st.columns(2)
+                with dcol1:
+                    st.download_button(
+                        label=f"Descargar {nombre_archivo}",
+                        data=to_excel_bytes(resultado),
+                        file_name=nombre_archivo,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                with dcol2:
+                    st.download_button(
+                        label=f"Descargar {nombre_csv}",
+                        data=to_csv_bytes(resultado),
+                        file_name=nombre_csv,
+                        mime="text/csv",
+                    )
             except Exception as e:
                 st.error(f"Ocurrió un error generando el reporte: {e}")
