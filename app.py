@@ -190,8 +190,8 @@ if st.button("Generar reporte", type="primary"):
             )
         else:
             try:
-                df_znisisfv = pd.read_excel(archivo_znisisfv, sheet_name="Formato54")
-                df_usuarios = pd.read_excel(archivo_usuarios, sheet_name="BD_Usuarios")
+                df_znisisfv = pd.read_excel(archivo_znisisfv, sheet_name=0)
+                df_usuarios = pd.read_excel(archivo_usuarios, sheet_name=0)
 
                 resultado = generar_reporte(df_znisisfv, df_usuarios, mes, anio)
 
