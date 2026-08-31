@@ -26,16 +26,18 @@ MESES = {
 }
 
 
-PREFIJO_ZNISISFV = "ZNISISFV_54787_54_"
+PREFIJOS_ZNISISFV_VALIDOS = ["ZNISISFV_54787_54_", "ZNISISFV_64716_54_"]
 
 
-def nombre_znisisfv_esperado(mes: int, anio: int) -> str:
-    """El archivo Formato54 se nombra con el mes SIGUIENTE al periodo reportado."""
+def nombres_znisisfv_esperados(mes: int, anio: int) -> list[str]:
+    """El archivo Formato54 se nombra con el mes SIGUIENTE al periodo reportado.
+    Devuelve la lista de nombres válidos (uno por cada prefijo aceptado)."""
     if mes == 12:
         mes_sig, anio_sig = 1, anio + 1
     else:
         mes_sig, anio_sig = mes + 1, anio
-    return f"{PREFIJO_ZNISISFV}{mes_sig:02d}{anio_sig}.xlsx"
+    sufijo = f"{mes_sig:02d}{anio_sig}.xlsx"
+    return [f"{prefijo}{sufijo}" for prefijo in PREFIJOS_ZNISISFV_VALIDOS]
 
 
 def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
@@ -177,13 +179,14 @@ if st.button("Generar reporte", type="primary"):
     if archivo_znisisfv is None or archivo_usuarios is None:
         st.error("Debes cargar los dos archivos antes de generar el reporte.")
     else:
-        nombre_esperado = nombre_znisisfv_esperado(mes, anio)
-        if archivo_znisisfv.name != nombre_esperado:
+        nombres_esperados = nombres_znisisfv_esperados(mes, anio)
+        if archivo_znisisfv.name not in nombres_esperados:
+            opciones = " o ".join(f"**{n}**" for n in nombres_esperados)
             st.error(
                 f"El archivo ZNISISFV cargado se llama **{archivo_znisisfv.name}**, "
-                f"pero para generar el reporte de {MESES[mes]} {anio} se espera el "
-                f"archivo **{nombre_esperado}** (Formato 54 usa el mes siguiente al "
-                "periodo reportado). Sube el archivo correcto para continuar."
+                f"pero para generar el reporte de {MESES[mes]} {anio} se espera "
+                f"{opciones} (Formato 54 usa el mes siguiente al periodo reportado). "
+                "Sube el archivo correcto para continuar."
             )
         else:
             try:
