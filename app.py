@@ -1,11 +1,17 @@
 import calendar
+import re
+import unicodedata
+import sys
 from datetime import date
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Generador Reporte SUI", layout="centered")
+# Permite importar el módulo común sin depender de cómo Streamlit resuelva el cwd
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from comun.utilidades import MESES, formato_pesos, mes_siguiente
 
 # ---------------------------------------------------------------------------
 # Orden exacto de columnas del archivo de salida (IUF1_MM_AAAA)
@@ -19,23 +25,33 @@ OUTPUT_COLUMNS = [
     "TARIFA", "VAL TOTAL FACT",
 ]
 
-MESES = {
-    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
-    7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre",
-    11: "Noviembre", 12: "Diciembre",
-}
-
-
 PREFIJOS_ZNISISFV_VALIDOS = ["ZNISISFV_54787_54_", "ZNISISFV_64716_54_"]
+
+CAMPOS_TOTAL = ["TARIFA", "VAL SUBS", "FACT CONSUMO"]
+COLUMNAS_ENTERAS_LARGAS = ["NIU", "COD LOCALIDAD"]
+COLUMNAS_4_DECIMALES = [
+    "FACT CONSUMO", "VAL REFACT", "VAL MORA", "INT MORA",
+    "VAL SUBS", "PORCE SUBS", "TARIFA", "VAL TOTAL FACT",
+]
+
+
+def limpiar_direccion(valor):
+    """Limpia el campo DIRECCION: quita el prefijo 'R.I.' y elimina tildes/ñ."""
+    if pd.isna(valor):
+        return valor
+    texto = str(valor).strip()
+    # Quita el prefijo "R.I." / "R.I " (ej. "R.I. BARRANQUILLITA" -> "BARRANQUILLITA")
+    texto = re.sub(r"^R\.\s*I\.?\s+", "", texto, flags=re.IGNORECASE)
+    # Quita tildes y reemplaza ñ/Ñ por n/N (descompone y elimina las marcas)
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return texto.strip()
 
 
 def nombres_znisisfv_esperados(mes: int, anio: int) -> list[str]:
     """El archivo Formato54 se nombra con el mes SIGUIENTE al periodo reportado.
     Devuelve la lista de nombres válidos (uno por cada prefijo aceptado)."""
-    if mes == 12:
-        mes_sig, anio_sig = 1, anio + 1
-    else:
-        mes_sig, anio_sig = mes + 1, anio
+    mes_sig, anio_sig = mes_siguiente(mes, anio)
     sufijo = f"{mes_sig:02d}{anio_sig}.xlsx"
     return [f"{prefijo}{sufijo}" for prefijo in PREFIJOS_ZNISISFV_VALIDOS]
 
@@ -51,7 +67,12 @@ def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
     df_znisisfv["NIU"] = df_znisisfv["NIU"].astype(str).str.strip()
     df_usuarios["NIU_SUI"] = df_usuarios["NIU_SUI"].astype(str).str.strip()
 
-    homolog = df_usuarios.set_index("NIU_SUI")[["LONGITUD", "LATITUD", "VEREDA"]]
+    # Si un NIU_SUI está repetido en Usuarios, se usa su primera aparición
+    # (el índice debe ser único para poder homologar con .map()).
+    homolog = (
+        df_usuarios.drop_duplicates(subset="NIU_SUI", keep="first")
+        .set_index("NIU_SUI")[["LONGITUD", "LATITUD", "VEREDA"]]
+    )
 
     out = pd.DataFrame(index=df_znisisfv.index)
 
@@ -70,10 +91,9 @@ def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
     out["TARIFA"] = df_znisisfv["VALOR_TARIFA"]
 
     # --- Campos homologados desde Usuarios (por NIU = NIU_SUI) ---
-    merged = df_znisisfv["NIU"].map(homolog["LONGITUD"])
-    out["LONGITUD"] = merged
+    out["LONGITUD"] = df_znisisfv["NIU"].map(homolog["LONGITUD"])
     out["LATITUD"] = df_znisisfv["NIU"].map(homolog["LATITUD"])
-    out["DIRECCION"] = df_znisisfv["NIU"].map(homolog["VEREDA"])
+    out["DIRECCION"] = df_znisisfv["NIU"].map(homolog["VEREDA"]).map(limpiar_direccion)
 
     # --- Valores constantes / calculados ---
     ultimo_dia = calendar.monthrange(anio, mes)[1]
@@ -100,14 +120,6 @@ def generar_reporte(df_znisisfv: pd.DataFrame, df_usuarios: pd.DataFrame,
     out["VAL TOTAL FACT"] = out["FACT CONSUMO"]
 
     return out[OUTPUT_COLUMNS]
-
-
-CAMPOS_TOTAL = ["TARIFA", "VAL SUBS", "FACT CONSUMO"]
-COLUMNAS_ENTERAS_LARGAS = ["NIU", "COD LOCALIDAD"]
-COLUMNAS_4_DECIMALES = [
-    "FACT CONSUMO", "VAL REFACT", "VAL MORA", "INT MORA",
-    "VAL SUBS", "PORCE SUBS", "TARIFA", "VAL TOTAL FACT",
-]
 
 
 def to_excel_bytes(df: pd.DataFrame) -> bytes:
@@ -193,6 +205,19 @@ if st.button("Generar reporte", type="primary"):
                 df_znisisfv = pd.read_excel(archivo_znisisfv, sheet_name=0)
                 df_usuarios = pd.read_excel(archivo_usuarios, sheet_name=0)
 
+                repetidos = (
+                    df_usuarios["NIU_SUI"].astype(str).str.strip()
+                    .loc[lambda x: x.duplicated(keep=False)]
+                    .unique()
+                )
+                if len(repetidos) > 0:
+                    st.warning(
+                        f"El archivo Usuarios tiene {len(repetidos)} NIU_SUI repetido(s): "
+                        f"{', '.join(repetidos[:15])}{'...' if len(repetidos) > 15 else ''}. "
+                        "Se usó la primera fila de cada uno para LONGITUD, LATITUD y DIRECCION; "
+                        "revisa cuál es la correcta."
+                    )
+
                 resultado = generar_reporte(df_znisisfv, df_usuarios, mes, anio)
 
                 faltantes = resultado["LONGITUD"].isna().sum()
@@ -206,9 +231,9 @@ if st.button("Generar reporte", type="primary"):
 
                 st.write("**Totales de validación** (no se incluyen en el Excel descargado):")
                 t1, t2, t3 = st.columns(3)
-                t1.metric("Suma TARIFA", f"${resultado['TARIFA'].sum():,.0f}")
-                t2.metric("Suma VAL SUBS", f"${resultado['VAL SUBS'].sum():,.0f}")
-                t3.metric("Suma FACT CONSUMO", f"${resultado['FACT CONSUMO'].sum():,.0f}")
+                t1.metric("Suma TARIFA", formato_pesos(resultado["TARIFA"].sum()))
+                t2.metric("Suma VAL SUBS", formato_pesos(resultado["VAL SUBS"].sum()))
+                t3.metric("Suma FACT CONSUMO", formato_pesos(resultado["FACT CONSUMO"].sum()))
 
                 st.dataframe(resultado.head(20))
 
