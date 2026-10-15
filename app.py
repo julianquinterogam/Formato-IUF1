@@ -1,17 +1,31 @@
 import calendar
 import re
 import unicodedata
-import sys
 from datetime import date
 from io import BytesIO
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-# Permite importar el módulo común sin depender de cómo Streamlit resuelva el cwd
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-from comun.utilidades import MESES, formato_pesos, mes_siguiente
+st.set_page_config(page_title="Generador Reporte SUI", layout="centered")
+
+MESES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
+    7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre",
+    11: "Noviembre", 12: "Diciembre",
+}
+
+
+def mes_siguiente(mes: int, anio: int) -> tuple[int, int]:
+    """Devuelve (mes, año) del mes siguiente, manejando el cambio de año."""
+    if mes == 12:
+        return 1, anio + 1
+    return mes + 1, anio
+
+
+def formato_pesos(valor: float) -> str:
+    """Formatea un número como pesos colombianos enteros, ej. $31,209,632."""
+    return f"${valor:,.0f}"
 
 # ---------------------------------------------------------------------------
 # Orden exacto de columnas del archivo de salida (IUF1_MM_AAAA)
